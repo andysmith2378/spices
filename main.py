@@ -4,7 +4,7 @@ from data import COMBINATIONS
 
 MAX_DIVISIONS, DIVISION_BASE = 4, 2
 OUTFILE = "double.png"
-GRAPH_WIDTH, GRAPH_HEIGHT, OFFSET, GRAPH_FONT, FONT_SIZE = 800, 800, 150, 'GOTHIC.ttf', 20
+GRAPH_WIDTH, GRAPH_HEIGHT, OFFSET, GRAPH_FONT, FONT_SIZE = 800, 800, 200, 'GOTHIC.ttf', 20
 MIN_INITIAL_TRIALS_EXPONENT = 4
 BLUEBASE, MIN_COLOUR_COMPONENT = 1023.0, 192.0
 BIG_FLOAT = float('inf')
@@ -37,15 +37,13 @@ def initialGuess():
     printIfYappy("\n".join([str(bestGuess), str(leastError), '']))
     return leastError, bestGuess
 
-def drawGraph(surface, guess, width, height, blueFactor):
-    surface.fill((0, 0, 0), )
-    for key in guess.keys():
-        x, y = guess[key]
-        surface.blit(nameFont.render(key, True, getColour(blueFactor, x, y)), (int(width * x), int(height * y)))
+def drawGraph(surf, guess, wide, high, blue, font):
+    surf.fill((0, 0, 0), )
+    [surf.blit(font.render(k, True, rgb(blue, x, y)), (int(wide * x), int(high * y))) for k, (x, y) in guess.items()]
     pygame.display.flip()
-    pygame.image.save(surface, OUTFILE)
+    pygame.image.save(surf, OUTFILE)
 
-def getColour(blueFactor, x, y):
+def rgb(blueFactor, x, y):
     red, green = 255.0 * x, 255.0 * y
     if red < MIN_COLOUR_COMPONENT and green < MIN_COLOUR_COMPONENT:
         return int(red), int(green), 255
@@ -61,7 +59,7 @@ if __name__ == '__main__':
     for attempt in range(MAX_DIVISIONS):
         divisions *= DIVISION_BASE
         grain = 1.0 / divisions
-        positions, progress = [division * grain for division in range(0, divisions)], True
+        positions, progress = [division * grain for division in range(divisions+1)], True
         printIfYappy(divisions, "DIVISIONS")
         while progress:
             bestKeys, progress = list(best.keys()), False
@@ -73,4 +71,4 @@ if __name__ == '__main__':
                                 for y2 in positions:
                                     error, progress = test((x1, y1), (x2, y2), k1, k2, bestKeys, best, error, progress)
             printIfYappy(", ".join([str(error), str(best)]))
-            drawGraph(screen, best, graphWidthLessOffset, graphHeightLessOffset, blueCoeff)
+            drawGraph(screen, best, graphWidthLessOffset, graphHeightLessOffset, blueCoeff, nameFont)
