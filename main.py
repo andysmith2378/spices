@@ -1,34 +1,24 @@
-import pygame, random
+import random, time
 from combo import Combination
 from data import COMBINATIONS
+from score import test, testPair
+from show import Graph
 
-MAX_DIVISIONS, DIVISION_BASE = 4, 2
+MAX_DIVISIONS, DIVISION_BASE, MAX_TIME = 4, 2, 18000
 OUTFILE = "double.png"
-GRAPH_WIDTH, GRAPH_HEIGHT, OFFSET, GRAPH_FONT, FONT_SIZE = 800, 800, 200, 'GOTHIC.ttf', 20
+LOGFILE = "double204.csv"
 MIN_INITIAL_TRIALS_EXPONENT = 4
-BLUEBASE, MIN_COLOUR_COMPONENT = 1023.0, 192.0
 BIG_FLOAT = float('inf')
 YAPPY = True
+TEST_METHOD = test
 
 def printIfYappy(*arguments):
     if YAPPY:
         print(*arguments)
 
-def test(coords1, coords2, key1, key2, guessKeys, bestGuess, leastError, improvement):
-    trialError = 0.0
-    for outerKeyIndex, outerKey in enumerate(guessKeys):
-        for innerKey in guessKeys[outerKeyIndex+1:]:
-            argumentBlob = coords1, coords2, key1, key2, bestGuess
-            variation = COMBINATIONS[outerKey].distance(COMBINATIONS[innerKey]) - Combination.combDist(
-                Combination.getPosition(outerKey, *argumentBlob), Combination.getPosition(innerKey, *argumentBlob))
-            trialError += variation * variation
-    if trialError < leastError:
-        leastError, improvement, bestGuess[key1], bestGuess[key2] = trialError, True, coords1, coords2
-    return leastError, improvement
-
-def initialGuess():
-    leastError, bestGuess, combinationKeys, comItems = BIG_FLOAT, None, COMBINATIONS.keys(), list(COMBINATIONS.items())
-    for trial in range(4 ** (DIVISION_BASE * max(MIN_INITIAL_TRIALS_EXPONENT, MAX_DIVISIONS))):
+def randomGuess(leastError=BIG_FLOAT, bestGuess=None):
+    combinationKeys, comItems = COMBINATIONS.keys(), list(COMBINATIONS.items())
+    for trial in range(int(4 ** (DIVISION_BASE * max(MIN_INITIAL_TRIALS_EXPONENT, MAX_DIVISIONS-1)))):
         error, guess = 0.0, dict([(comb, (random.random(), random.random())) for comb in combinationKeys])
         for indx, (name1, comb1) in enumerate(comItems):
             error += sum([Combination.getVar(comb1, comb2, name1, name2, guess) for name2, comb2 in comItems[indx+1:]])
@@ -37,38 +27,40 @@ def initialGuess():
     printIfYappy("\n".join([str(bestGuess), str(leastError), '']))
     return leastError, bestGuess
 
-def drawGraph(surf, guess, wide, high, blue, font):
-    surf.fill((0, 0, 0), )
-    [surf.blit(font.render(k, True, rgb(blue, x, y)), (int(wide * x), int(high * y))) for k, (x, y) in guess.items()]
-    pygame.display.flip()
-    pygame.image.save(surf, OUTFILE)
+def divide(segments, startTime, base=DIVISION_BASE):
+    segments = int(segments * base)
+    grain = 1.0 / segments
+    printIfYappy(segments, "DIVISIONS")
+    printIfYappy("TIME FROM START", time.time() - startTime)
+    return segments, [division * grain for division in range(segments + 1)], True
 
-def rgb(blueFactor, x, y):
-    red, green = 255.0 * x, 255.0 * y
-    if red < MIN_COLOUR_COMPONENT and green < MIN_COLOUR_COMPONENT:
-        return int(red), int(green), 255
-    return int(red), int(green), max(0, int(BLUEBASE - blueFactor * max(red, green)))
+def movePair(error, best, positionList, loglines, startTime):
+    bestKeys, progress = list(best.keys()), False
+    for keyIndex, k1 in enumerate(bestKeys):
+        for k2 in bestKeys[keyIndex + 1:]:
+            for x1 in positionList:
+                for y1 in positionList:
+                    for x2 in positionList:
+                        for y2 in positionList:
+                            error, progress = TEST_METHOD((x1, y1), (x2, y2), k1, k2, bestKeys, best, error, progress)
+        loglines.append("".join([str(time.time() - startTime), ",", str(error), "\n"]))
+    return error, progress
 
 if __name__ == '__main__':
-    error, best = initialGuess()
-    graphWidthLessOffset, graphHeightLessOffset = GRAPH_WIDTH - OFFSET, GRAPH_HEIGHT - OFFSET
-    blueCoeff = BLUEBASE / 255.0
-    pygame.init()
-    nameFont = pygame.font.SysFont(GRAPH_FONT, FONT_SIZE, bold=True)
-    screen, divisions = pygame.display.set_mode((GRAPH_WIDTH, GRAPH_HEIGHT),), 1
+    #graph = Graph(OUTFILE)
+    startTime, divisions = time.time(), 1
+    error, best = randomGuess()
+    loglines = [("".join([str(time.time() - startTime),",", str(error), "\n"]))]
     for attempt in range(MAX_DIVISIONS):
-        divisions *= DIVISION_BASE
-        grain = 1.0 / divisions
-        positions, progress = [division * grain for division in range(divisions+1)], True
-        printIfYappy(divisions, "DIVISIONS")
-        while progress:
-            bestKeys, progress = list(best.keys()), False
-            for keyIndex, k1 in enumerate(bestKeys):
-                for k2 in bestKeys[keyIndex + 1:]:
-                    for x1 in positions:
-                        for y1 in positions:
-                            for x2 in positions:
-                                for y2 in positions:
-                                    error, progress = test((x1, y1), (x2, y2), k1, k2, bestKeys, best, error, progress)
+        if time.time() > (startTime + MAX_TIME):
+            break
+        divisions, positions, prog = divide(divisions, startTime)
+        while prog:
+            if time.time() > (startTime + MAX_TIME):
+                break
+            error, prog = movePair(error, best, positions, loglines, startTime)
             printIfYappy(", ".join([str(error), str(best)]))
-            drawGraph(screen, best, graphWidthLessOffset, graphHeightLessOffset, blueCoeff, nameFont)
+            #graph.etch(bestGuess)
+            loglines.append("".join([str(time.time() - startTime), ",", str(error), "\n"]))
+    with open(LOGFILE, "w") as logfile:
+        logfile.writelines(loglines)
